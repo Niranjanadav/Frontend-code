@@ -131,12 +131,21 @@ function setupDashboard() {
 }
 
 // COUNTER PAGE
+let incrementDebounceTimer = null;
+let decrementDebounceTimer = null;
+let pendingIncrement = 0;
+let pendingDecrement = 0;
+let displayedBeadCount = 0; // Current count from server
+let currentUserId = null;
+
 function setupCounterPage() {
     const userInfo = apiService.getUserInfo();
     if (!userInfo.userId) {
         window.location.href = 'index.html';
         return;
     }
+
+    currentUserId = userInfo.userId;
 
     // Update user info in header
     const usernameDisplay = document.getElementById('usernameDisplay');
@@ -147,16 +156,16 @@ function setupCounterPage() {
     // Load initial counter display
     loadCounterDisplay(userInfo.userId);
 
-    // Setup increment button
+    // Setup increment button with debouncing
     const incrementBtn = document.getElementById('incrementBtn');
     if (incrementBtn) {
-        incrementBtn.addEventListener('click', () => incrementBeads(userInfo.userId, 1));
+        incrementBtn.addEventListener('click', () => handleIncrementWithDebounce(userInfo.userId, 1));
     }
 
-    // Setup decrement button
+    // Setup decrement button with debouncing
     const decrementBtn = document.getElementById('decrementBtn');
     if (decrementBtn) {
-        decrementBtn.addEventListener('click', () => decrementBeads(userInfo.userId, 1));
+        decrementBtn.addEventListener('click', () => handleDecrementWithDebounce(userInfo.userId, 1));
     }
 
     // Setup logout button
@@ -164,6 +173,22 @@ function setupCounterPage() {
     if (logoutBtn) {
         logoutBtn.addEventListener('click', handleLogout);
     }
+
+    // Setup reset button
+    const resetBtn = document.getElementById('resetBtn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => resetTodayCount(userInfo.userId));
+    }
+
+    // Sync remaining pending increments/decrements on page unload
+    window.addEventListener('beforeunload', () => {
+        if (pendingIncrement > 0) {
+            syncPendingBeads(userInfo.userId);
+        }
+        if (pendingDecrement > 0) {
+            syncPendingDecrements(userInfo.userId);
+        }
+    });
 }
 
 async function loadDashboardData(userId) {
@@ -197,6 +222,156 @@ async function loadDashboardData(userId) {
     } catch (error) {
         console.error('Error loading dashboard data:', error);
         showAlert('Error loading progress data', 'danger');
+    }
+}
+
+// Handle increment with debouncing (5 second delay)
+function handleIncrementWithDebounce(userId, count) {
+    pendingIncrement += count;
+    
+    // Update UI immediately for instant feedback
+    updateBeadCountUI();
+    
+    // Clear existing increment timer
+    clearTimeout(incrementDebounceTimer);
+    
+    // Set new timer - wait 5 seconds after last increment click
+    incrementDebounceTimer = setTimeout(() => {
+        if (pendingIncrement > 0) {
+            syncPendingBeads(userId);
+        }
+    }, 5000);
+}
+
+// Update local UI display
+function updateBeadCountUI() {
+    const counterDisplay = document.getElementById('counterDisplay');
+    if (counterDisplay) {
+        counterDisplay.classList.add('pulse');
+        // Display current count + pending increments - pending decrements
+        const newCount = displayedBeadCount + pendingIncrement - pendingDecrement;
+        counterDisplay.textContent = Math.max(0, newCount);
+        setTimeout(() => counterDisplay.classList.remove('pulse'), 300);
+    }
+}
+
+// Handle decrement with debouncing (5 second delay)
+function handleDecrementWithDebounce(userId, count) {
+    pendingDecrement += count;
+    
+    // Update UI immediately for instant feedback
+    updateBeadCountUI();
+    
+    // Clear existing decrement timer
+    clearTimeout(decrementDebounceTimer);
+    
+    // Set new timer - wait 5 seconds after last decrement click
+    decrementDebounceTimer = setTimeout(() => {
+        if (pendingDecrement > 0) {
+            syncPendingDecrements(userId);
+        }
+    }, 5000);
+}
+
+// Sync pending decrements with backend
+async function syncPendingDecrements(userId) {
+    if (pendingDecrement === 0) return;
+    
+    const beadsToSync = pendingDecrement;
+    pendingDecrement = 0;
+    
+    try {
+        const response = await apiService.decrementBeads(userId, beadsToSync);
+        
+        // Update displayed count from server response
+        displayedBeadCount = response.todayBeads;
+        
+        // Update counter display with pending operations included
+        updateBeadCountUI();
+
+        // Update display - with null checks
+        const todayBeadsEl = document.getElementById('todayBeads');
+        const todayRoundsEl = document.getElementById('todayRounds');
+        const totalBeadsEl = document.getElementById('totalBeads');
+        const totalRoundsEl = document.getElementById('totalRounds');
+        
+        if (todayBeadsEl) todayBeadsEl.textContent = response.todayBeads;
+        if (todayRoundsEl) todayRoundsEl.textContent = response.todayRounds;
+        if (totalBeadsEl) totalBeadsEl.textContent = response.lifeTimeBeads;
+        if (totalRoundsEl) totalRoundsEl.textContent = response.lifeTimeRounds;
+
+        // Update progress bar
+        const beadsPerRound = 108;
+        const todayProgress = Math.min((response.todayBeads / beadsPerRound) * 100, 100);
+
+        const todayProgressBar = document.getElementById('todayProgressBar');
+        
+        if (todayProgressBar) {
+            todayProgressBar.style.width = todayProgress + '%';
+            todayProgressBar.textContent = Math.floor(todayProgress) + '%';
+        }
+
+        // Show success feedback
+        if (beadsToSync > 1) {
+            showAlert(`Removed ${beadsToSync} beads!`, 'info');
+        }
+    } catch (error) {
+        console.error('Error syncing decrements:', error);
+        showAlert('Error updating count', 'danger');
+        // Restore pending count on error
+        pendingDecrement = beadsToSync;
+    }
+}
+
+// Sync pending increments with backend
+async function syncPendingBeads(userId) {
+    if (pendingIncrement === 0) return;
+    
+    const beadsToSync = pendingIncrement;
+    pendingIncrement = 0;
+    
+    try {
+        const response = await apiService.incrementBeads(userId, beadsToSync);
+        
+        // Update displayed count from server response
+        displayedBeadCount = response.todayBeads;
+        
+        // Update counter display with pending operations included
+        updateBeadCountUI();
+
+        // Update display - with null checks
+        const todayBeadsEl = document.getElementById('todayBeads');
+        const todayRoundsEl = document.getElementById('todayRounds');
+        const totalBeadsEl = document.getElementById('totalBeads');
+        const totalRoundsEl = document.getElementById('totalRounds');
+        
+        if (todayBeadsEl) todayBeadsEl.textContent = response.todayBeads;
+        if (todayRoundsEl) todayRoundsEl.textContent = response.todayRounds;
+        if (totalBeadsEl) totalBeadsEl.textContent = response.lifeTimeBeads;
+        if (totalRoundsEl) totalRoundsEl.textContent = response.lifeTimeRounds;
+
+        // Update progress bar
+        const beadsPerRound = 108;
+        const todayProgress = Math.min((response.todayBeads / beadsPerRound) * 100, 100);
+
+        const todayProgressBar = document.getElementById('todayProgressBar');
+        
+        if (todayProgressBar) {
+            todayProgressBar.style.width = todayProgress + '%';
+            todayProgressBar.textContent = Math.floor(todayProgress) + '%';
+        }
+
+        // Show success feedback
+        if (beadsToSync === 108) {
+            showAlert('🎉 Congratulations! You completed a round (108 beads)!', 'success');
+        } else if (beadsToSync > 1) {
+            showAlert(`Great! +${beadsToSync} beads added!`, 'success');
+        }
+    } catch (error) {
+        console.error('Error syncing beads:', error);
+        showAlert('Error updating count', 'danger');
+        // Restore pending count on error
+        pendingIncrement = beadsToSync;
     }
 }
 
@@ -248,10 +423,45 @@ async function incrementBeads(userId, count) {
 
 async function resetTodayCount(userId) {
     try {
-        // Note: This assumes backend supports reset. If not, we'll just show a message.
-        // Currently, we'll just reload the dashboard
-        showAlert('Reset functionality not available yet', 'info');
-        // In future, add: await apiService.resetTodayCount(userId);
+        // Clear any pending increments/decrements and their timers
+        clearTimeout(incrementDebounceTimer);
+        clearTimeout(decrementDebounceTimer);
+        pendingIncrement = 0;
+        pendingDecrement = 0;
+
+        const response = await apiService.resetBeads(userId);
+        
+        // Update displayed count from server response
+        displayedBeadCount = response.todayBeads;
+        
+        // Update counter display
+        const counterDisplay = document.getElementById('counterDisplay');
+        if (counterDisplay) {
+            counterDisplay.classList.add('pulse');
+            counterDisplay.textContent = displayedBeadCount;
+            setTimeout(() => counterDisplay.classList.remove('pulse'), 300);
+        }
+
+        // Update display - with null checks
+        const todayBeadsEl = document.getElementById('todayBeads');
+        const todayRoundsEl = document.getElementById('todayRounds');
+        const totalBeadsEl = document.getElementById('totalBeads');
+        const totalRoundsEl = document.getElementById('totalRounds');
+        
+        if (todayBeadsEl) todayBeadsEl.textContent = response.todayBeads;
+        if (todayRoundsEl) todayRoundsEl.textContent = response.todayRounds;
+        if (totalBeadsEl) totalBeadsEl.textContent = response.lifeTimeBeads;
+        if (totalRoundsEl) totalRoundsEl.textContent = response.lifeTimeRounds;
+
+        // Update progress bar
+        const todayProgressBar = document.getElementById('todayProgressBar');
+        
+        if (todayProgressBar) {
+            todayProgressBar.style.width = '0%';
+            todayProgressBar.textContent = '0%';
+        }
+
+        showAlert('Today\'s count has been reset!', 'warning');
     } catch (error) {
         console.error('Error resetting count:', error);
         showAlert('Error resetting count', 'danger');
@@ -262,10 +472,15 @@ async function loadCounterDisplay(userId) {
     try {
         const today = await apiService.getTodayProgress(userId);
 
+        // Store current count from server and reset pending
+        displayedBeadCount = today.todayBeads || 0;
+        pendingIncrement = 0;
+        pendingDecrement = 0;
+
         // Update counter display only
         const counterDisplay = document.getElementById('counterDisplay');
         if (counterDisplay) {
-            counterDisplay.textContent = today.todayBeads || 0;
+            counterDisplay.textContent = displayedBeadCount;
         }
     } catch (error) {
         console.error('Error loading counter display:', error);
@@ -273,16 +488,7 @@ async function loadCounterDisplay(userId) {
     }
 }
 
-async function decrementBeads(userId, count) {
-    try {
-        // Note: Backend API doesn't have decrement endpoint
-        // So we'll just show an alert for now
-        showAlert('Decrement functionality requires backend API endpoint', 'info');
-    } catch (error) {
-        console.error('Error decrementing beads:', error);
-        showAlert('Error updating count', 'danger');
-    }
-}
+
 
 // PROFILE PAGE
 function setupProfilePage() {

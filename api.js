@@ -128,6 +128,25 @@ class ApiService {
         return this.handleResponse(response);
     }
 
+    // Decrement beads
+    async decrementBeads(userId, beadCount) {
+        const response = await fetch(`${this.baseURL}/japa/decrement/${userId}`, {
+            method: 'POST',
+            headers: this.getHeaders(),
+            body: JSON.stringify({ beadCount })
+        });
+        return this.handleResponse(response);
+    }
+
+    // Reset today's beads
+    async resetBeads(userId) {
+        const response = await fetch(`${this.baseURL}/japa/reset/${userId}`, {
+            method: 'POST',
+            headers: this.getHeaders()
+        });
+        return this.handleResponse(response);
+    }
+
     // Get today's progress
     async getTodayProgress(userId) {
         const response = await fetch(`${this.baseURL}/japa/today/${userId}`, {
