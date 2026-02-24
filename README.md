@@ -24,21 +24,12 @@ A modern, responsive web application for tracking your Japa counter practice. Bu
 1. **Extract the frontend files** to your desired location
 2. **Open in a web server** (required for CORS and proper functionality)
 
-#### Option 1: Using Python (Simple HTTP Server)
-```bash
-python -m http.server 8000
-```
+#### Option 1: Start spring boot backend server
 Then open `http://localhost:8000` in your browser
 
-#### Option 2: Using Node.js (http-server)
-```bash
-npx http-server
-```
-Then open `http://localhost:8080` in your browser
+#### Option 2: Start frontend code by go live
+Then open `http://localhost:5500` in your browser
 
-#### Option 3: Using VS Code Live Server Extension
-- Install "Live Server" extension in VS Code
-- Right-click on `index.html` and select "Open with Live Server"
 
 ### File Structure
 ```
