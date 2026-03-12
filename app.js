@@ -232,6 +232,17 @@ function handleIncrementWithDebounce(userId, count) {
     // Update UI immediately for instant feedback
     updateBeadCountUI();
     
+    // Check if a round is completed (108 beads per round)
+    const currentTotal = displayedBeadCount + pendingIncrement - pendingDecrement;
+    const beadsPerRound = 108;
+    
+    // If round completed, sync immediately without waiting
+    if (currentTotal > 0 && currentTotal % beadsPerRound === 0) {
+        clearTimeout(incrementDebounceTimer);
+        syncPendingBeads(userId);
+        return;
+    }
+    
     // Clear existing increment timer
     clearTimeout(incrementDebounceTimer);
     
@@ -261,6 +272,17 @@ function handleDecrementWithDebounce(userId, count) {
     
     // Update UI immediately for instant feedback
     updateBeadCountUI();
+    
+    // Check if a round milestone is reached (multiple of 108 beads)
+    const currentTotal = displayedBeadCount + pendingIncrement - pendingDecrement;
+    const beadsPerRound = 108;
+    
+    // If round milestone reached, sync immediately without waiting
+    if (currentTotal >= 0 && currentTotal % beadsPerRound === 0) {
+        clearTimeout(decrementDebounceTimer);
+        syncPendingDecrements(userId);
+        return;
+    }
     
     // Clear existing decrement timer
     clearTimeout(decrementDebounceTimer);
@@ -315,6 +337,9 @@ async function syncPendingDecrements(userId) {
         if (beadsToSync > 1) {
             showAlert(`Removed ${beadsToSync} beads!`, 'info');
         }
+        
+        // Show stored in backend notification
+        showAlert('✅ Count saved to backend!', 'success');
     } catch (error) {
         console.error('Error syncing decrements:', error);
         showAlert('Error updating count', 'danger');
@@ -367,6 +392,9 @@ async function syncPendingBeads(userId) {
         } else if (beadsToSync > 1) {
             showAlert(`Great! +${beadsToSync} beads added!`, 'success');
         }
+        
+        // Show stored in backend notification
+        showAlert('✅ Count saved to backend!', 'success');
     } catch (error) {
         console.error('Error syncing beads:', error);
         showAlert('Error updating count', 'danger');
